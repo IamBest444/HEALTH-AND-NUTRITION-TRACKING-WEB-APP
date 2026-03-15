@@ -4,7 +4,7 @@ import json
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
-from new_backend import FILES,initialize_databases, load_profile, save_profile, get_daily_stats, load_all_databases, show_food_log,show_hydration, show_health_advisor,show_fitness, show_analytics_ad,show_settings,generate_nutrition_plan,show_dashboard
+from new_backend import FILES, initialize_databases, load_profile, save_profile, get_daily_stats, load_all_databases, show_food_log, show_hydration, show_health_advisor, show_fitness, show_analytics_ad, show_settings, generate_nutrition_plan, show_dashboard, show_ai_chatbot
 
 initialize_databases()
 if "user" not in st.session_state:
@@ -63,7 +63,7 @@ else: #Load Databases
 
     page = st.sidebar.radio(
         "Navigate",
-        ["🏠 Home", "📝 Input Meal Logs", "📊 Nutrition Plan","🩺 Health Advisor",
+        ["🏠 Home", "📝 Input Meal Logs", "📊 Nutrition Plan", "🩺 Health Advisor", "🤖 AI chatbot",
          "💧 Hydration Tracker", "🏋 Exercise Tracker", "📅 Meal Forecasting", "💡 Smart Tips","📊 Analytics","⚙️ Settings"]
     )
 
@@ -99,6 +99,9 @@ else: #Load Databases
 
     if page =="🩺 Health Advisor":
         show_health_advisor(user,df_sym)
+
+    if page == "🤖 AI chatbot":
+        show_ai_chatbot()    
 
     if page == "💧 Hydration Tracker":
         show_hydration(user)
