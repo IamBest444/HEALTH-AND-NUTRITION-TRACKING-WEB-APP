@@ -531,8 +531,7 @@ def show_settings(user):
         del st.session_state["user"]
         st.rerun()
 
-import os
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
 
 def show_ai_chatbot():
     st.title("🤖 AI chatbot")
@@ -541,6 +540,14 @@ def show_ai_chatbot():
 
     if st.button("Ask AI"):
         if user_question.strip() != "":
+            
+            api_key = os.getenv("GROQ_API_KEY")
+
+            if not api_key:
+                st.error("API key not found. Please set GROQ_API_KEY in Streamlit secrets.")
+                return
+
+            client = Groq(api_key=api_key)
 
             response = client.chat.completions.create(
                 model="llama-3.1-8b-instant",
