@@ -4,5 +4,5 @@ __pycache__/
 *.pyc
 
 # DO NOT PUSH USER DATA
-*.csv
-*.json
+#*.csv
+#*.json
