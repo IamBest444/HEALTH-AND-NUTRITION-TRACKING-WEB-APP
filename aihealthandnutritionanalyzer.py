@@ -101,7 +101,7 @@ else: #Load Databases
         show_health_advisor(user,df_sym)
 
     if page == "🤖 AI chatbot":
-        show_ai_chatbot()    
+        show_ai_chatbot(user, df_food, df_ex, df_sym)
 
     if page == "💧 Hydration Tracker":
         show_hydration(user)

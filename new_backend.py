@@ -525,37 +525,243 @@ def show_settings(user):
         with open(FILES["weight_log"], "rb") as f: c3.download_button("Download Weight Log", f, "weight_log.csv")
 
     st.divider()
+
+    SAFE_FILES = [
+        FILES["profile"],
+        FILES["food_log"],
+        FILES["exercise_log"],
+        FILES["water_log"],
+        FILES["weight_log"],
+        FILES["custom_food"]
+]
+
     if st.button("🗑️ Reset All Data (Irreversible)", type="primary"):
-        for f in FILES.values():
-            if "db" not in f and os.path.exists(f): os.remove(f)
-        del st.session_state["user"]
+        for f in SAFE_FILES:
+            if os.path.exists(f):
+                os.remove(f)
+
+        if "user" in st.session_state:
+            del st.session_state["user"]
+
         st.rerun()
 
 
 
-def show_ai_chatbot():
-    st.title("🤖 AI chatbot")
+def show_ai_chatbot(user, df_food, df_ex, df_sym):
+    st.title("🤖 AI Health Assistant")
 
-    user_question = st.text_input("Ask anything about health, diet, nutrition or fitness")
+    # 🧠 Memory init
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    # 💬 Show chat history
+    st.subheader("💬 Chat")
+    for msg in st.session_state.chat_history:
+        if msg["role"] == "user":
+            st.markdown(f"**You:** {msg['content']}")
+        else:
+            st.markdown(f"**AI:** {msg['content']}")
+
+    user_question = st.text_input("Ask anything about your health...")
 
     if st.button("Ask AI"):
         if user_question.strip() != "":
-            
-            api_key = os.getenv("GROQ_API_KEY")
+
+            # 🔐 Secure API key
+            api_key = st.secrets.get("GROQ_API_KEY")
 
             if not api_key:
-                st.error("API key not found. Please set GROQ_API_KEY in Streamlit secrets.")
+                st.error("API key missing.")
                 return
 
             client = Groq(api_key=api_key)
 
+            # 🔥 Daily stats
+            stats = get_daily_stats()
+
+            # 💧 Water
+            df_w = load_data_safe(FILES["water_log"])
+            today = datetime.now().strftime("%Y-%m-%d")
+            water_today = 0
+
+            if df_w is not None and not df_w.empty:
+                df_w["Date"] = df_w["Date"].astype(str)
+                water_today = df_w[df_w["Date"] == today]["Effective_Hydration_ml"].sum()
+
+            # 🍎 Better food summary
+            food_summary = ""
+
+            if df_food is not None and not df_food.empty:
+                df_food["Dish Name"] = df_food["Dish Name"].astype(str)
+
+                healthy_food = df_food[
+                    ~df_food["Dish Name"].str.lower().str.contains(
+                        "cake|pastry|dessert|ice cream|chocolate|sweet|laddu|halwa|burger|pizza",
+                        na=False
+                   )
+               ]
+
+                if "Protein per Serving (g)" in healthy_food.columns:
+                    healthy_food = healthy_food.sort_values(
+                        by="Protein per Serving (g)", ascending=False
+                 )
+
+                food_summary = healthy_food.head(10).to_string(index=False)
+
+
+
+
+            # 🏋 Better exercise summary
+            ex_summary = ""
+            if df_ex is not None and not df_ex.empty:
+                ex_summary = df_ex.tail(10).to_string(index=False)
+
+            # 🎯 Personalization boost
+            remaining = user["Targets"]["Calories"] - stats["eaten"]
+            protein_goal = user["Targets"]["Protein"]
+
+
+            goal = user.get("Goal")
+
+            extra_rule = ""
+
+            if goal == "Weight Loss":
+                extra_rule = "User wants fat loss. Suggest low calorie, high protein, no sugar foods."
+            elif goal == "Muscle Gain":
+                extra_rule = "User wants muscle gain. Suggest high protein and calorie surplus meals."
+            elif goal == "Weight Gain":
+                extra_rule = "User wants weight gain. Suggest calorie dense but healthy foods."
+            else:
+                extra_rule = "User wants to maintain weight. Suggest balanced diet."
+
+            
+                        # 🎯 Intent detection
+            q = user_question.lower()
+
+            is_water = any(word in q for word in ["water", "pani"])
+            is_food = any(word in q for word in ["eat", "diet", "food", "kha", "meal"])
+            is_calories = "calorie" in q
+            is_greeting = any(word in q for word in ["hi", "hello", "hey"])
+            is_nutrition = any(word in q for word in ["nutrition", "protein", "carbs", "fat"])
+            is_exercise = any(word in q for word in ["exercise", "workout", "burn", "activity"])
+            is_dashboard = any(word in q for word in ["dashboard", "summary", "status", "report"])
+
+            # 👋 Greeting (no AI call)
+            if is_greeting:
+                answer = "Hello! How can I help you?"
+                st.success(answer)
+                return
+
+            # 🎯 Smart context
+            if is_water:
+                context = f"""
+    Water intake today: {water_today} ml
+    Goal: {user['Targets']['Water']} ml
+    """
+
+            elif is_food:
+                context = f"""
+    Calories eaten: {stats['eaten']} kcal
+    Remaining calories: {remaining} kcal
+    Protein: {stats['protein']} g / {protein_goal} g
+    Goal: {user.get('Goal')}
+    """
+
+            elif is_calories:
+                context = f"""
+    Calories eaten: {stats['eaten']} kcal
+    Calories burnt: {stats['burnt']} kcal
+    Remaining calories: {remaining} kcal
+    """
+            elif is_nutrition:   
+                context = f"""
+    Calories eaten: {stats['eaten']} kcal
+    Protein: {stats['protein']} g / {protein_goal} g
+    """
+
+            elif is_exercise:
+                context = f"""
+    Calories burnt today: {stats['burnt']} kcal
+    """
+            elif is_dashboard:
+                context = f"""
+    Status:
+    Water: {water_today} ml / {user['Targets']['Water']} ml
+    Calories: {stats['eaten']} eaten / {remaining} remaining
+    Exercise burned: {stats['burnt']} kcal
+    """
+            else:
+                context = "Answer briefly and only what user asked."
+
+            # ✅ ALWAYS OUTSIDE if-else
+            messages = [
+                   
+                {"role": "system", "content": """
+You are a smart AI health assistant.
+
+Rules:
+- ONLY answer what the user asks
+- Do NOT include extra or unrelated information
+- Keep answers realistic and practical
+- NEVER say "no data", "unknown", or "not provided"
+
+Water rules:
+- Show current intake and goal
+- Suggest a simple action (like drink 250-500 ml now)
+- Use simple everyday words
+
+Food rules:
+- Suggest max 2 simple healthy Indian food options
+
+Nutrition rules:
+- If user asks about nutrition → show calories and protein clearly
+- ALWAYS use given data
+
+Calories rules:
+- If asked → show eaten, burnt, and remaining calories only
+
+Exercise rules:
+- If asked → show calories burnt only
+- If 0 → suggest simple activity (walk, workout)
+- Keep it practical and short
+
+Format STRICT:
+Status: <current situation>
+Next: <what to do now>
+Tip: <simple practical tip>
+
+Style:
+- Simple, natural English (like a real person)
+- Short and clear
+- No complex or robotic words
+"""}]
+
+ 
+
+            # Add past chats
+            for msg in st.session_state.chat_history:
+                messages.append(msg)
+
+            # Add new question
+            messages.append({
+                "role": "user",
+                "content": context + "\n\nUser Question: " + user_question
+            })
+
+            # 🤖 AI CALL
             response = client.chat.completions.create(
                 model="llama-3.1-8b-instant",
-                messages=[
-                    {"role": "system", "content": "You are a helpful AI health and nutrition assistant."},
-                    {"role": "user", "content": user_question}
-                ]
+                messages=messages
             )
 
             answer = response.choices[0].message.content
+
+            # 💾 Save memory
+            st.session_state.chat_history.append({"role": "user", "content": user_question})
+            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+
+            # ✅ Show response
             st.success(answer)
+
+            st.warning("⚠️ This AI is not a medical professional.")
+     
